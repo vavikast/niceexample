@@ -1,47 +1,38 @@
 package main
+
 import (
-	"fmt"
+	"github.com/gin-gonic/gin"
 	"io"
+	"log"
 	"net"
+	"net/http"
 	"sync"
+	"time"
 )
-func proxyConn(source, destination string) error {
-	connSource, err := net.Dial("tcp", source)
-	if err != nil {
-		return err
-	}
-	defer connSource.Close()
-	connDestination, err := net.Dial("tcp", destination)
-	if err != nil {
-		return err
-	}
-	defer connDestination.Close()
-	// connDestination replies to connSource
-	 go func() { _, _ = io.Copy(connSource, connDestination) }()
-	// connSource messages to connDestination
-	_, err = io.Copy(connDestination, connSource)
-	return err
-}
 
-func proxy1(from io.Reader, to io.Writer) error {
-	fromWriter, fromIsWriter := from.(io.Writer)
-	toReader, toIsReader := to.(io.Reader)
-	if toIsReader && fromIsWriter {
-		// Send replies since "from" and "to" implement the
-		// necessary interfaces.
-		go func() { _, _ = io.Copy(fromWriter, toReader) }()
-	}
-	_, err := io.Copy(to, from)
-	return err
+func server(dst string) {
+	r := gin.Default()
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Hello World")
+	})
+	r.Run(dst)
 }
+func main() {
+	dst := "localhost:9091"
+	go server(dst)
+	time.Sleep(time.Second * 5)
+	ProxyTCP(dst)
+	for {
 
-func main()  {
+	}
+}
+func ProxyTCP(dst string) error {
 	var wg sync.WaitGroup
-	server, err := net.Listen("tcp", "127.0.0.1:")
-	proxyServer, err := net.Listen("tcp", "127.0.0.1:")
+	proxyServer, err := net.Listen("tcp", "127.0.0.1:9090")
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal("err")
 	}
+	defer proxyServer.Close()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -50,21 +41,34 @@ func main()  {
 			if err != nil {
 				return
 			}
+			defer conn.Close()
 			go func(from net.Conn) {
 				defer from.Close()
-				to, err := net.Dial("tcp",
-					server.Addr().String())
+				to, err := net.Dial("tcp", dst)
 				if err != nil {
-					fmt.Println(err)
-					return
+					log.Fatal(err)
 				}
 				defer to.Close()
-				err = proxy1(from, to)
+				err = proxy(from, to)
 				if err != nil && err != io.EOF {
-					fmt.Println(err)
+					log.Fatal(err)
 				}
 			}(conn)
 		}
 	}()
+	wg.Wait()
+	return nil
+}
+func proxy(from io.Reader, to io.Writer) error {
+	fromWriter, fromIsWriter := from.(io.Writer)
 
+	toReader, toIsReader := to.(io.Reader)
+
+	if toIsReader && fromIsWriter {
+		go func() {
+			io.Copy(fromWriter, toReader)
+		}()
+	}
+	_, err := io.Copy(to, from)
+	return err
 }

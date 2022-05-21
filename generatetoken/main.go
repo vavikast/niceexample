@@ -56,6 +56,7 @@ func main() {
 
 	//如果是windows系统打开二维码
 	if runtime.GOOS == "windows" {
+		fmt.Println("Android手机APK下载: https://os-android.liqucn.com/rj/225046.shtml iOS手机直接:AppStore 搜索 google authenticator")
 		exec.Command("cmd", "/c", "start ./qrcode.png")
 	}
 
